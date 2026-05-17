@@ -13,6 +13,6 @@ RUN npm install
 RUN npm run db:generate
 RUN npm run build
 
-EXPOSE 5173
+EXPOSE 8080
 
-CMD ["sh", "-c", "npm run preview -w apps/web -- --host 0.0.0.0 --port ${PORT:-5173}"]
+CMD ["sh", "-c", "npm run preview -w apps/web -- --host 0.0.0.0 --port ${PORT:-8080}"]
