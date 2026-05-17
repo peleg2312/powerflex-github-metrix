@@ -1,0 +1,9 @@
+node_modules
+dist
+.env
+.DS_Store
+coverage
+*.log
+apps/web/dist
+.vite
+packages/db/prisma/dev.db

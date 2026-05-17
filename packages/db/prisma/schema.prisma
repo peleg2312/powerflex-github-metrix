@@ -1,0 +1,236 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SourceKind {
+  github
+  docs
+  legacy
+}
+
+enum CompatibilityStatus {
+  supported
+  unsupported
+  inferred
+  unknown
+}
+
+enum Severity {
+  critical
+  high
+  medium
+  low
+  unknown
+}
+
+enum SyncStatus {
+  running
+  success
+  failed
+}
+
+model Vendor {
+  id        String    @id @default(uuid())
+  name      String    @unique
+  products  Product[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+}
+
+model Product {
+  id        String       @id @default(uuid())
+  vendorId  String
+  name      String
+  slug      String       @unique
+  kind      String
+  vendor    Vendor       @relation(fields: [vendorId], references: [id])
+  repos     Repository[]
+  releases  Release[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([vendorId])
+}
+
+model Repository {
+  id            String          @id @default(uuid())
+  productId     String
+  owner         String
+  name          String
+  url           String          @unique
+  sourceKind    SourceKind      @default(github)
+  primaryBranch String?
+  product       Product         @relation(fields: [productId], references: [id])
+  releases      Release[]
+  commits       Commit[]
+  pullRequests  PullRequest[]
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@unique([owner, name])
+  @@index([productId])
+}
+
+model Release {
+  id             String              @id @default(uuid())
+  productId      String
+  repositoryId   String?
+  version        String
+  normalized     String
+  title          String?
+  body           String?
+  url            String?
+  tagName        String
+  commitSha      String?
+  releaseDate    DateTime
+  isPrerelease   Boolean             @default(false)
+  isDraft        Boolean             @default(false)
+  product        Product             @relation(fields: [productId], references: [id])
+  repository     Repository?         @relation(fields: [repositoryId], references: [id])
+  artifacts      ReleaseArtifact[]
+  fixedBugs      Bug[]
+  knownIssues    KnownIssue[]
+  sourceEvidence SourceEvidence[]
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@unique([productId, version])
+  @@index([repositoryId])
+  @@index([releaseDate])
+}
+
+model ReleaseArtifact {
+  id          String   @id @default(uuid())
+  releaseId   String
+  name        String
+  url         String
+  contentType String?
+  sizeBytes   Int?
+  release     Release  @relation(fields: [releaseId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+
+  @@index([releaseId])
+}
+
+model CompatibilityEdge {
+  id              String              @id @default(uuid())
+  sourceProductId String?
+  sourceVersion   String
+  targetKind      String
+  targetVersion   String
+  status          CompatibilityStatus @default(unknown)
+  confidence      Float               @default(0.5)
+  sourceUrl       String?
+  evidenceText    String?
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+
+  @@unique([sourceVersion, targetKind, targetVersion])
+  @@index([targetKind, targetVersion])
+  @@index([sourceProductId])
+}
+
+model Bug {
+  id             String           @id @default(uuid())
+  externalId     String?
+  title          String
+  description    String
+  severity       Severity         @default(unknown)
+  fixedInVersion String
+  commitSha      String?
+  sourceUrl      String?
+  confidence     Float            @default(0.5)
+  releaseId      String?
+  release        Release?         @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  pullRequestId  String?
+  pullRequest    PullRequest?     @relation(fields: [pullRequestId], references: [id], onDelete: SetNull)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([fixedInVersion, title, sourceUrl])
+  @@index([fixedInVersion])
+  @@index([severity])
+}
+
+model KnownIssue {
+  id          String   @id @default(uuid())
+  releaseId   String?
+  version     String
+  description String
+  workaround  String?
+  sourceUrl   String?
+  confidence  Float    @default(0.5)
+  release     Release? @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([version, description])
+  @@index([version])
+}
+
+model Commit {
+  id           String      @id @default(uuid())
+  repositoryId String
+  sha          String
+  message      String
+  authorName   String?
+  authorEmail  String?
+  committedAt  DateTime?
+  url          String?
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  createdAt    DateTime    @default(now())
+
+  @@unique([repositoryId, sha])
+  @@index([committedAt])
+}
+
+model PullRequest {
+  id           String      @id @default(uuid())
+  repositoryId String
+  number       Int
+  title        String
+  body         String?
+  state        String
+  mergedAt     DateTime?
+  mergeCommit  String?
+  url          String?
+  repository   Repository  @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  bugs         Bug[]
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([repositoryId, number])
+  @@index([mergedAt])
+}
+
+model SourceEvidence {
+  id          String     @id @default(uuid())
+  sourceKind  SourceKind
+  sourceUrl   String
+  selector    String?
+  rawText     String
+  checksum    String
+  releaseId   String?
+  release     Release?   @relation(fields: [releaseId], references: [id], onDelete: SetNull)
+  collectedAt DateTime   @default(now())
+
+  @@unique([sourceUrl, checksum])
+  @@index([sourceKind])
+  @@index([releaseId])
+}
+
+model SyncRun {
+  id          String     @id @default(uuid())
+  source      String
+  status      SyncStatus @default(running)
+  startedAt   DateTime   @default(now())
+  finishedAt  DateTime?
+  message     String?
+  recordsSeen Int        @default(0)
+  recordsUpserted Int    @default(0)
+}

@@ -1,0 +1,18 @@
+{
+  "name": "worker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "NODE_OPTIONS='--conditions=development' tsx watch src/main.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/main.js",
+    "sync:once": "NODE_OPTIONS='--conditions=development' tsx src/sync-once.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@powerflex/db": "file:../../packages/db",
+    "@powerflex/ingestion": "file:../../packages/ingestion",
+    "@powerflex/shared-schema": "file:../../packages/shared-schema"
+  }
+}
