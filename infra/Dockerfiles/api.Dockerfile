@@ -12,4 +12,4 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["node", "apps/api/dist/main.js"]
+CMD ["sh", "-c", "npm run db:migrate && node apps/api/dist/main.js"]
