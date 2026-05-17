@@ -10,6 +10,7 @@ import {
   inferSeverity,
   knownIssuesFromRelease,
   normalizeVersion,
+  parseVerifyScript,
   releaseBugCandidates
 } from "./normalizers.js";
 
@@ -150,6 +151,11 @@ export class IngestionService {
           },
           update: { sourceUrl: release.html_url, releaseId: dbRelease.id }
         });
+      }
+
+      // Fetch authoritative K8s/OCP compatibility from verify script in each tagged release
+      if (source.productSlug === "csi-powerflex") {
+        await this.syncVerifyScript(source, release.tag_name, stripV(release.tag_name));
       }
     }
 
@@ -313,6 +319,32 @@ export class IngestionService {
       recordsUpserted++;
     }
     return { recordsSeen: result.edges.length + result.evidence.length, recordsUpserted };
+  }
+
+  private async syncVerifyScript(source: GithubSource, tag: string, version: string): Promise<void> {
+    const url = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${tag}/dell-csi-helm-installer/verify-csi-vxflexos.sh`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const script = await res.text();
+      const { kubernetes, openshift } = parseVerifyScript(script);
+      for (const k8sVersion of kubernetes) {
+        await this.db.compatibilityEdge.upsert({
+          where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion } },
+          create: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion, status: "supported", confidence: 0.98, sourceUrl: url, evidenceText: `K8s ${k8sVersion} from verify script at ${tag}` },
+          update: { status: "supported", confidence: 0.98, sourceUrl: url }
+        });
+      }
+      for (const ocpVersion of openshift) {
+        await this.db.compatibilityEdge.upsert({
+          where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion } },
+          create: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion, status: "supported", confidence: 0.98, sourceUrl: url, evidenceText: `OCP ${ocpVersion} from verify script at ${tag}` },
+          update: { status: "supported", confidence: 0.98, sourceUrl: url }
+        });
+      }
+    } catch {
+      // Non-fatal: verify script may not exist for older tags
+    }
   }
 
   private async ensureProductAndRepository(source: GithubSource) {

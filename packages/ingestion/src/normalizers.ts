@@ -115,3 +115,23 @@ export function bugCandidateFromCommit(commit: GithubCommit): {
 export function extractVersionMentions(text: string): string[] {
   return Array.from(new Set(text.match(/\b\d+\.\d+(?:\.\d+)?(?:\.x)?\b/g) ?? []));
 }
+
+export function parseVerifyScript(script: string): { kubernetes: string[]; openshift: string[] } {
+  const k8sMatch = script.match(/verify_k8s_versions\s+"(\d+\.\d+)"\s+"(\d+\.\d+)"/);
+  const ocpMatch = script.match(/verify_openshift_versions\s+"(\d+\.\d+)"\s+"(\d+\.\d+)"/);
+
+  function range(min: string, max: string): string[] {
+    const [minMaj, minMin] = min.split(".").map(Number);
+    const [maxMaj, maxMin] = max.split(".").map(Number);
+    const versions: string[] = [];
+    for (let minor = minMin; minor <= maxMin; minor++) {
+      versions.push(`${minMaj}.${minor}`);
+    }
+    return versions;
+  }
+
+  return {
+    kubernetes: k8sMatch ? range(k8sMatch[1], k8sMatch[2]) : [],
+    openshift: ocpMatch ? range(ocpMatch[1], ocpMatch[2]) : []
+  };
+}
