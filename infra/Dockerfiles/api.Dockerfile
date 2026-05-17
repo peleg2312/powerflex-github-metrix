@@ -12,4 +12,4 @@ RUN npm run build
 
 EXPOSE 3000
 
-CMD ["sh", "-c", "npm run db:migrate && node apps/api/dist/main.js"]
+CMD ["sh", "-c", "echo 'Running migrations...' && npx prisma migrate deploy --schema packages/db/prisma/schema.prisma && echo 'Migrations done, starting API...' && node apps/api/dist/main.js"]
