@@ -299,11 +299,11 @@ function Matrix({ rows }: { rows: MatrixRow[] }) {
         <tbody>
           {rows.map((row) => (
             <tr key={row.operator_version}>
-              <td>{row.operator_version}</td>
-              <td>{row.csi_driver_version || "—"}</td>
-              <td>{row.kubernetes.join(", ") || "—"}</td>
-              <td>{row.openshift.join(", ") || "—"}</td>
-              <td>{row.powerflex_backend.join(", ") || "—"}</td>
+              <td data-label="PowerFlex CSI">{row.operator_version}</td>
+              <td data-label="CSM Operator">{row.csi_driver_version || "—"}</td>
+              <td data-label="Kubernetes">{row.kubernetes.join(", ") || "—"}</td>
+              <td data-label="OpenShift">{row.openshift.join(", ") || "—"}</td>
+              <td data-label="PowerFlex backend">{row.powerflex_backend.join(", ") || "—"}</td>
             </tr>
           ))}
         </tbody>
