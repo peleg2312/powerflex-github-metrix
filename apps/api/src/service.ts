@@ -32,11 +32,10 @@ export class AppService {
     const cached = await this.cacheGet<VersionProjection[]>(cacheKey);
     if (cached) return cached;
 
-    // Primary entity: CSI PowerFlex driver releases (2.x only)
+    const slug = query.product ?? "csi-powerflex";
     const releases = await prisma.release.findMany({
       where: {
-        product: { slug: "csi-powerflex" },
-        version: { startsWith: "2." },
+        product: { slug },
         isDraft: false,
         ...(query.operatorVersion ? { version: cleanVersion(query.operatorVersion) } : {})
       },
@@ -285,10 +284,10 @@ export class AppService {
       return parsed ? `${parsed.major}.${parsed.minor}` : v.split(".").slice(0, 2).join(".");
     })() : null;
 
+    const slug = query.product ?? "csi-powerflex";
     const releases = await prisma.release.findMany({
       where: {
-        product: { slug: "csi-powerflex" },
-        version: { startsWith: "2." },
+        product: { slug },
         isDraft: false,
         ...(versionPrefix ? { version: { startsWith: versionPrefix } } : {})
       },
@@ -325,13 +324,21 @@ export class AppService {
     }).filter((r) => r.changes.length > 0 || !!versionPrefix);
   }
 
-  async csiVersions(): Promise<string[]> {
+  async driverVersions(product: string): Promise<string[]> {
     const releases = await prisma.release.findMany({
-      where: { product: { slug: "csi-powerflex" } },
+      where: { product: { slug: product } },
       orderBy: { releaseDate: "desc" },
       select: { version: true }
     });
     return releases.map((r) => r.version);
+  }
+
+  async products(): Promise<Array<{ slug: string; name: string }>> {
+    return prisma.product.findMany({
+      where: { releases: { some: {} } },
+      select: { slug: true, name: true },
+      orderBy: { name: "asc" }
+    });
   }
 
   verifyGithubSignature(rawBody: Buffer, signature?: string): boolean {

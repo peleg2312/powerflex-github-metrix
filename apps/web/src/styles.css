@@ -121,6 +121,38 @@ select {
   color: #9fb4af;
 }
 
+.productSwitcher {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(148, 163, 184, 0.2);
+  flex-wrap: wrap;
+}
+
+.productSwitcher button {
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 20px;
+  min-height: 36px;
+  padding: 0 18px;
+  background: rgba(23, 33, 33, 0.86);
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.9rem;
+  font-weight: 500;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.productSwitcher button.active {
+  background: #36b99f;
+  color: #071614;
+  border-color: #36b99f;
+}
+
+:root[data-theme="light"] .productSwitcher button {
+  background: rgba(255, 255, 255, 0.86);
+}
+
 .tabs {
   justify-content: flex-start;
   border-bottom: 1px solid rgba(148, 163, 184, 0.25);

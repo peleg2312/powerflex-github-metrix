@@ -54,10 +54,14 @@ export type FeatureRow = {
   changes: ChangeEntry[];
 };
 
+export type ProductRow = { slug: string; name: string };
+
 export const api = {
+  products: () => getJson<ProductRow[]>("/products"),
   versions: (params: Record<string, string | undefined>) => getJson<VersionProjection[]>("/versions", params),
   matrix: (params: Record<string, string | undefined>) => getJson<{ generated_at: string; rows: MatrixRow[] }>("/matrix", params),
   bugs: (params: Record<string, string | undefined>) => getJson<BugRow[]>("/bugs", params),
   knownIssues: (params: Record<string, string | undefined>) => getJson<KnownIssueRow[]>("/known-issues", params),
-  features: (params: Record<string, string | undefined>) => getJson<FeatureRow[]>("/features", params)
+  features: (params: Record<string, string | undefined>) => getJson<FeatureRow[]>("/features", params),
+  driverVersions: (product: string) => getJson<string[]>(`/csi-versions?product=${encodeURIComponent(product)}`)
 };

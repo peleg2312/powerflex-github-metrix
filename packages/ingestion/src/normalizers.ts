@@ -116,6 +116,28 @@ export function extractVersionMentions(text: string): string[] {
   return Array.from(new Set(text.match(/\b\d+\.\d+(?:\.\d+)?(?:\.x)?\b/g) ?? []));
 }
 
+export function parseTridentReleaseBody(body: string): { kubernetes: string[]; openshift: string[] } {
+  // Trident release notes contain lines like:
+  // "validated with Kubernetes 1.28-1.32 and Red Hat OpenShift Container Platform 4.15-4.17"
+  const k8sMatch = body.match(/[Kk]ubernetes\s+(\d+\.\d+)\s*(?:[-–]|to|through)\s*(\d+\.\d+)/);
+  const osMatch = body.match(/[Oo]pen[Ss]hift(?:\s+Container\s+Platform)?\s+(\d+\.\d+)\s*(?:[-–]|to|through)\s*(\d+\.\d+)/);
+
+  function range(min: string, max: string): string[] {
+    const [minMaj, minMin] = min.split(".").map(Number);
+    const [, maxMin] = max.split(".").map(Number);
+    const versions: string[] = [];
+    for (let minor = minMin; minor <= maxMin; minor++) {
+      versions.push(`${minMaj}.${minor}`);
+    }
+    return versions;
+  }
+
+  return {
+    kubernetes: k8sMatch ? range(k8sMatch[1], k8sMatch[2]) : [],
+    openshift: osMatch ? range(osMatch[1], osMatch[2]) : []
+  };
+}
+
 export function parseVerifyScript(script: string): { kubernetes: string[]; openshift: string[] } {
   const k8sMatch = script.match(/verify_k8s_versions\s+"(\d+\.\d+)"\s+"(\d+\.\d+)"/);
   const ocpMatch = script.match(/verify_openshift_versions\s+"(\d+\.\d+)"\s+"(\d+\.\d+)"/);

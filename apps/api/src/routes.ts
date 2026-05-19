@@ -42,8 +42,13 @@ export class AppController {
   }
 
   @Get("csi-versions")
-  csiVersions() {
-    return this.service.csiVersions();
+  csiVersions(@Query("product") product?: string) {
+    return this.service.driverVersions(product ?? "csi-powerflex");
+  }
+
+  @Get("products")
+  products() {
+    return this.service.products();
   }
 
   @Get("known-issues")

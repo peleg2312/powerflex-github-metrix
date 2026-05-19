@@ -10,6 +10,7 @@ import {
   inferSeverity,
   knownIssuesFromRelease,
   normalizeVersion,
+  parseTridentReleaseBody,
   parseVerifyScript,
   releaseBugCandidates
 } from "./normalizers.js";
@@ -156,6 +157,10 @@ export class IngestionService {
       // Fetch authoritative K8s/OCP compatibility from verify script in each tagged release
       if (source.productSlug === "csi-powerflex") {
         await this.syncVerifyScript(source, release.tag_name, stripV(release.tag_name));
+      }
+      // Parse K8s/OCP ranges from Trident release body
+      if (source.productSlug === "trident" && release.body) {
+        await this.syncTridentCompatibility(release.body, release.html_url, stripV(release.tag_name));
       }
     }
 
@@ -321,6 +326,24 @@ export class IngestionService {
     return { recordsSeen: result.edges.length + result.evidence.length, recordsUpserted };
   }
 
+  private async syncTridentCompatibility(body: string, sourceUrl: string, version: string): Promise<void> {
+    const { kubernetes, openshift } = parseTridentReleaseBody(body);
+    for (const k8sVersion of kubernetes) {
+      await this.db.compatibilityEdge.upsert({
+        where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion } },
+        create: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion, status: "supported", confidence: 0.92, sourceUrl, evidenceText: `K8s ${k8sVersion} from Trident release notes` },
+        update: { status: "supported", confidence: 0.92, sourceUrl }
+      });
+    }
+    for (const ocpVersion of openshift) {
+      await this.db.compatibilityEdge.upsert({
+        where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion } },
+        create: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion, status: "supported", confidence: 0.92, sourceUrl, evidenceText: `OCP ${ocpVersion} from Trident release notes` },
+        update: { status: "supported", confidence: 0.92, sourceUrl }
+      });
+    }
+  }
+
   private async syncVerifyScript(source: GithubSource, tag: string, version: string): Promise<void> {
     const url = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${tag}/dell-csi-helm-installer/verify-csi-vxflexos.sh`;
     try {
@@ -348,9 +371,10 @@ export class IngestionService {
   }
 
   private async ensureProductAndRepository(source: GithubSource) {
+    const vendorName = source.vendor ?? this.config.vendor;
     const vendor = await this.db.vendor.upsert({
-      where: { name: this.config.vendor },
-      create: { name: this.config.vendor },
+      where: { name: vendorName },
+      create: { name: vendorName },
       update: {}
     });
     const product = await this.db.product.upsert({

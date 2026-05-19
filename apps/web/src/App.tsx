@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { VersionProjection } from "@powerflex/shared-schema";
-import { api, type BugRow, type ChangeEntry, type FeatureRow, type KnownIssueRow, type MatrixRow } from "./api.js";
+import { api, type BugRow, type ChangeEntry, type FeatureRow, type KnownIssueRow, type MatrixRow, type ProductRow } from "./api.js";
 
 type Tab = "timeline" | "matrix" | "bugs" | "features";
 
@@ -9,11 +9,13 @@ const severityOrder: Record<string, number> = { critical: 4, high: 3, medium: 2,
 export function App() {
   const [tab, setTab] = useState<Tab>("timeline");
   const [dark, setDark] = useState(true);
+  const [product, setProduct] = useState("csi-powerflex");
+  const [productList, setProductList] = useState<ProductRow[]>([]);
   const [search, setSearch] = useState("");
   const [kubernetes, setKubernetes] = useState("");
   const [openshift, setOpenshift] = useState("");
-  const [version, setVersion] = useState("");   // CSI PowerFlex version
-  const [allVersions, setAllVersions] = useState<VersionProjection[]>([]); // full list for dropdowns
+  const [version, setVersion] = useState("");
+  const [allVersions, setAllVersions] = useState<VersionProjection[]>([]);
   const [versions, setVersions] = useState<VersionProjection[]>([]);
   const [matrix, setMatrix] = useState<MatrixRow[]>([]);
   const [bugs, setBugs] = useState<BugRow[]>([]);
@@ -29,17 +31,18 @@ export function App() {
 
   const params = useMemo(
     () => ({
+      product,
       q: search || undefined,
       kubernetes: kubernetes || undefined,
       openshift: openshift || undefined,
-      operatorVersion: version || undefined   // param name kept for API compat
+      operatorVersion: version || undefined
     }),
-    [search, kubernetes, openshift, version]
+    [product, search, kubernetes, openshift, version]
   );
 
   const bugParams = useMemo(
-    () => ({ q: search || undefined, version: version || undefined }),
-    [search, version]
+    () => ({ product, q: search || undefined, version: version || undefined }),
+    [product, search, version]
   );
 
   const issueParams = useMemo(
@@ -48,17 +51,32 @@ export function App() {
   );
 
   const featureParams = useMemo(
-    () => ({ version: version || undefined, q: search || undefined, type: featureType || undefined }),
-    [version, search, featureType]
+    () => ({ product, version: version || undefined, q: search || undefined, type: featureType || undefined }),
+    [product, version, search, featureType]
   );
+
+  function switchProduct(slug: string) {
+    setProduct(slug);
+    setVersion("");
+    setSearch("");
+    setKubernetes("");
+    setOpenshift("");
+    setTab("timeline");
+    setExpandedVersion(null);
+    setExpandedBug(null);
+  }
 
   useEffect(() => {
     document.documentElement.dataset.theme = dark ? "dark" : "light";
   }, [dark]);
 
   useEffect(() => {
-    api.versions({}).then(setAllVersions).catch(() => {});
+    api.products().then(setProductList).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    api.versions({ product }).then(setAllVersions).catch(() => {});
+  }, [product]);
 
   useEffect(() => {
     setLoading(true);
@@ -91,6 +109,7 @@ export function App() {
   const allKubernetes = unique(allVersions.flatMap((v) => v.kubernetes_supported));
   const allOpenShift = unique(allVersions.flatMap((v) => v.openshift_supported));
   const hasVersionFilter = !!(version || search);
+  const currentProduct = productList.find((p) => p.slug === product);
 
   function toggleBug(id: string) {
     setExpandedBug((prev) => (prev === id ? null : id));
@@ -100,7 +119,7 @@ export function App() {
     <main className="shell">
       <header className="topbar">
         <div>
-          <p className="eyebrow">Dell PowerFlex CSI Driver</p>
+          <p className="eyebrow">{currentProduct?.name ?? "CSI Driver"}</p>
           <h1>Version Intelligence</h1>
         </div>
         <div className="actions">
@@ -116,6 +135,16 @@ export function App() {
         </div>
       </header>
 
+      {productList.length > 1 ? (
+        <nav className="productSwitcher" aria-label="Products">
+          {productList.map((p) => (
+            <button key={p.slug} className={product === p.slug ? "active" : ""} onClick={() => switchProduct(p.slug)}>
+              {p.name}
+            </button>
+          ))}
+        </nav>
+      ) : null}
+
       <section className="filters">
         <select value={kubernetes} onChange={(e) => setKubernetes(e.target.value)}>
           <option value="">All Kubernetes</option>
@@ -126,12 +155,12 @@ export function App() {
           {allOpenShift.map((v) => <option key={v}>{v}</option>)}
         </select>
         <select value={version} onChange={(e) => setVersion(e.target.value)}>
-          <option value="">Any CSI version</option>
+          <option value="">Any version</option>
           {allVersions.map((v) => (
-            <option key={v.operator_version} value={v.operator_version}>CSI {v.operator_version}</option>
+            <option key={v.operator_version} value={v.operator_version}>{v.operator_version}</option>
           ))}
         </select>
-        <span className="status">{loading ? "Loading…" : `${versions.length} CSI versions`}</span>
+        <span className="status">{loading ? "Loading…" : `${versions.length} versions`}</span>
       </section>
 
       <nav className="tabs" aria-label="Views">
@@ -150,10 +179,10 @@ export function App() {
             <article className="versionRow" key={v.operator_version}>
               <button className="rowHead" onClick={() => setExpandedVersion(expandedVersion === v.operator_version ? null : v.operator_version)}>
                 <span>
-                  <strong>PowerFlex CSI {v.operator_version}</strong>
+                  <strong>{v.operator_version}</strong>
                   {v.csi_driver_version
                     ? <small>via CSM Operator {v.csi_driver_version}</small>
-                    : <small className="noData">compatibility data not yet available</small>}
+                    : null}
                 </span>
                 <span className="chevron">{expandedVersion === v.operator_version ? "▲" : "▼"}</span>
               </button>
@@ -161,7 +190,7 @@ export function App() {
                 <div className="details">
                   <PillGroup title="Kubernetes" values={v.kubernetes_supported} />
                   <PillGroup title="OpenShift" values={v.openshift_supported} />
-                  <PillGroup title="PowerFlex backend" values={v.powerflex_backend_version} />
+                  <PillGroup title="Backend" values={v.powerflex_backend_version} />
                   <p>Released {new Date(v.release_date).toLocaleDateString()} · {v.bugs_fixed.length} bug fixes · {v.known_issues.length} known issues</p>
                 </div>
               ) : null}
@@ -170,7 +199,7 @@ export function App() {
         </section>
       ) : null}
 
-      {tab === "matrix" ? <Matrix rows={matrix} /> : null}
+      {tab === "matrix" ? <Matrix rows={matrix} productName={currentProduct?.name ?? "CSI Driver"} /> : null}
 
       {tab === "features" ? (
         <>
@@ -187,11 +216,11 @@ export function App() {
               : <span className="status">{features.reduce((n, r) => n + r.changes.length, 0)} entries across {features.length} versions</span>}
           </section>
           {features.length === 0 && !featuresLoading
-            ? <div className="alert">No changes found. Pick a CSI version or adjust the filters above.</div>
+            ? <div className="alert">No changes found. Pick a version or adjust the filters above.</div>
             : features.map((row) => (
               <section className="issueSection" key={row.version}>
                 <h2 className="sectionTitle">
-                  CSI {row.version}
+                  {row.version}
                   <span className="sectionVersion">{new Date(row.release_date).toLocaleDateString()}</span>
                   {row.release_url ? <a href={row.release_url} target="_blank" rel="noreferrer" style={{ fontSize: "0.78rem", fontWeight: 400 }}>Release notes ↗</a> : null}
                 </h2>
@@ -217,13 +246,13 @@ export function App() {
               <span className="status">
                 {hasVersionFilter
                   ? `${bugs.length} bugs${knownIssues.length ? ` · ${knownIssues.length} known issues` : ""}`
-                  : "Select a CSI version or search to filter"}
+                  : "Select a version or search to filter"}
               </span>
             )}
           </section>
 
           {!hasVersionFilter ? (
-            <div className="alert">Pick a CSI version from the dropdown above, or use the search bar to find specific bugs and known issues.</div>
+            <div className="alert">Pick a version from the dropdown above, or use the search bar to find specific bugs and known issues.</div>
           ) : null}
 
           {knownIssues.length > 0 ? (
@@ -251,7 +280,7 @@ export function App() {
 
           {bugs.length > 0 ? (
             <section className="issueSection">
-              <h2 className="sectionTitle">Fixed Bugs {version ? <span className="sectionVersion">CSI {version}</span> : null}</h2>
+              <h2 className="sectionTitle">Fixed Bugs {version ? <span className="sectionVersion">{version}</span> : null}</h2>
               {bugs.map((bug) => (
                 <article className="issueLine" key={bug.id}>
                   <div className="issueLineHead" onClick={() => toggleBug(`bug:${bug.id}`)}>
@@ -283,27 +312,27 @@ export function App() {
   );
 }
 
-function Matrix({ rows }: { rows: MatrixRow[] }) {
+function Matrix({ rows, productName }: { rows: MatrixRow[]; productName: string }) {
   return (
     <section className="tableWrap">
       <table>
         <thead>
           <tr>
-            <th>PowerFlex CSI</th>
+            <th>{productName}</th>
             <th>CSM Operator</th>
             <th>Kubernetes</th>
             <th>OpenShift</th>
-            <th>PowerFlex backend</th>
+            <th>Backend</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((row) => (
             <tr key={row.operator_version}>
-              <td data-label="PowerFlex CSI">{row.operator_version}</td>
+              <td data-label={productName}>{row.operator_version}</td>
               <td data-label="CSM Operator">{row.csi_driver_version || "—"}</td>
               <td data-label="Kubernetes">{row.kubernetes.join(", ") || "—"}</td>
               <td data-label="OpenShift">{row.openshift.join(", ") || "—"}</td>
-              <td data-label="PowerFlex backend">{row.powerflex_backend.join(", ") || "—"}</td>
+              <td data-label="Backend">{row.powerflex_backend.join(", ") || "—"}</td>
             </tr>
           ))}
         </tbody>

@@ -6,6 +6,7 @@ export type GithubSource = {
   owner: string;
   repo: string;
   legacy?: boolean;
+  vendor?: string;
 };
 
 export type DocsSource = {
@@ -48,6 +49,15 @@ export const defaultSourceConfig: SourceConfig = {
       owner: "dell",
       repo: "dell-csi-operator",
       legacy: true
+    },
+    {
+      kind: "github",
+      productSlug: "trident",
+      productName: "NetApp Trident CSI",
+      productKind: "csi_driver",
+      owner: "netapp",
+      repo: "trident",
+      vendor: "NetApp"
     }
   ],
   docs: [
