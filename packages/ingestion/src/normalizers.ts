@@ -116,26 +116,26 @@ export function extractVersionMentions(text: string): string[] {
   return Array.from(new Set(text.match(/\b\d+\.\d+(?:\.\d+)?(?:\.x)?\b/g) ?? []));
 }
 
-export function parseTridentReleaseBody(body: string): { kubernetes: string[]; openshift: string[] } {
-  // Trident release notes contain lines like:
-  // "validated with Kubernetes 1.28-1.32 and Red Hat OpenShift Container Platform 4.15-4.17"
-  const k8sMatch = body.match(/[Kk]ubernetes\s+(\d+\.\d+)\s*(?:[-–]|to|through)\s*(\d+\.\d+)/);
-  const osMatch = body.match(/[Oo]pen[Ss]hift(?:\s+Container\s+Platform)?\s+(\d+\.\d+)\s*(?:[-–]|to|through)\s*(\d+\.\d+)/);
+export function parseTridentConfigGo(source: string): { kubernetes: string[]; openshift: string[] } | null {
+  // Each Trident release tag has authoritative constants in config/config.go:
+  //   KubernetesVersionMin = "v1.27"
+  //   KubernetesVersionMax = "v1.35"
+  const minMatch = source.match(/KubernetesVersionMin\s*=\s*"v?(\d+\.\d+)"/);
+  const maxMatch = source.match(/KubernetesVersionMax\s*=\s*"v?(\d+\.\d+)"/);
+  if (!minMatch || !maxMatch) return null;
 
-  function range(min: string, max: string): string[] {
-    const [minMaj, minMin] = min.split(".").map(Number);
-    const [, maxMin] = max.split(".").map(Number);
-    const versions: string[] = [];
-    for (let minor = minMin; minor <= maxMin; minor++) {
-      versions.push(`${minMaj}.${minor}`);
-    }
-    return versions;
+  const [minMaj, minMin] = minMatch[1].split(".").map(Number);
+  const [, maxMin] = maxMatch[1].split(".").map(Number);
+
+  const kubernetes: string[] = [];
+  const openshift: string[] = [];
+  for (let minor = minMin; minor <= maxMin; minor++) {
+    kubernetes.push(`${minMaj}.${minor}`);
+    // OCP 4.x ships K8s 1.(x+13), so K8s 1.minor → OCP 4.(minor-13)
+    const ocpMinor = minor - 13;
+    if (ocpMinor >= 10) openshift.push(`4.${ocpMinor}`);
   }
-
-  return {
-    kubernetes: k8sMatch ? range(k8sMatch[1], k8sMatch[2]) : [],
-    openshift: osMatch ? range(osMatch[1], osMatch[2]) : []
-  };
+  return { kubernetes, openshift };
 }
 
 export function parseVerifyScript(script: string): { kubernetes: string[]; openshift: string[] } {

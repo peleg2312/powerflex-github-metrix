@@ -190,7 +190,7 @@ export function App() {
                 <div className="details">
                   <PillGroup title="Kubernetes" values={v.kubernetes_supported} />
                   <PillGroup title="OpenShift" values={v.openshift_supported} />
-                  <PillGroup title="Backend" values={v.powerflex_backend_version} />
+                  {product === "csi-powerflex" ? <PillGroup title="PowerFlex Backend" values={v.powerflex_backend_version} /> : null}
                   <p>Released {new Date(v.release_date).toLocaleDateString()} · {v.bugs_fixed.length} bug fixes · {v.known_issues.length} known issues</p>
                 </div>
               ) : null}
@@ -199,7 +199,7 @@ export function App() {
         </section>
       ) : null}
 
-      {tab === "matrix" ? <Matrix rows={matrix} productName={currentProduct?.name ?? "CSI Driver"} /> : null}
+      {tab === "matrix" ? <Matrix rows={matrix} productName={currentProduct?.name ?? "CSI Driver"} showBackend={product === "csi-powerflex"} /> : null}
 
       {tab === "features" ? (
         <>
@@ -312,7 +312,7 @@ export function App() {
   );
 }
 
-function Matrix({ rows, productName }: { rows: MatrixRow[]; productName: string }) {
+function Matrix({ rows, productName, showBackend }: { rows: MatrixRow[]; productName: string; showBackend: boolean }) {
   return (
     <section className="tableWrap">
       <table>
@@ -322,7 +322,7 @@ function Matrix({ rows, productName }: { rows: MatrixRow[]; productName: string 
             <th>CSM Operator</th>
             <th>Kubernetes</th>
             <th>OpenShift</th>
-            <th>Backend</th>
+            {showBackend ? <th>PowerFlex Backend</th> : null}
           </tr>
         </thead>
         <tbody>
@@ -332,7 +332,7 @@ function Matrix({ rows, productName }: { rows: MatrixRow[]; productName: string 
               <td data-label="CSM Operator">{row.csi_driver_version || "—"}</td>
               <td data-label="Kubernetes">{row.kubernetes.join(", ") || "—"}</td>
               <td data-label="OpenShift">{row.openshift.join(", ") || "—"}</td>
-              <td data-label="Backend">{row.powerflex_backend.join(", ") || "—"}</td>
+              {showBackend ? <td data-label="PowerFlex Backend">{row.powerflex_backend.join(", ") || "—"}</td> : null}
             </tr>
           ))}
         </tbody>

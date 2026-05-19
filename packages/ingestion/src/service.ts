@@ -10,7 +10,7 @@ import {
   inferSeverity,
   knownIssuesFromRelease,
   normalizeVersion,
-  parseTridentReleaseBody,
+  parseTridentConfigGo,
   parseVerifyScript,
   releaseBugCandidates
 } from "./normalizers.js";
@@ -158,9 +158,9 @@ export class IngestionService {
       if (source.productSlug === "csi-powerflex") {
         await this.syncVerifyScript(source, release.tag_name, stripV(release.tag_name));
       }
-      // Parse K8s/OCP ranges from Trident release body
-      if (source.productSlug === "trident" && release.body) {
-        await this.syncTridentCompatibility(release.body, release.html_url, stripV(release.tag_name));
+      // Fetch authoritative K8s/OCP compatibility from config.go in each tagged release
+      if (source.productSlug === "trident") {
+        await this.syncTridentCompatibility(source, release.tag_name, stripV(release.tag_name));
       }
     }
 
@@ -326,21 +326,30 @@ export class IngestionService {
     return { recordsSeen: result.edges.length + result.evidence.length, recordsUpserted };
   }
 
-  private async syncTridentCompatibility(body: string, sourceUrl: string, version: string): Promise<void> {
-    const { kubernetes, openshift } = parseTridentReleaseBody(body);
-    for (const k8sVersion of kubernetes) {
-      await this.db.compatibilityEdge.upsert({
-        where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion } },
-        create: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion, status: "supported", confidence: 0.92, sourceUrl, evidenceText: `K8s ${k8sVersion} from Trident release notes` },
-        update: { status: "supported", confidence: 0.92, sourceUrl }
-      });
-    }
-    for (const ocpVersion of openshift) {
-      await this.db.compatibilityEdge.upsert({
-        where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion } },
-        create: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion, status: "supported", confidence: 0.92, sourceUrl, evidenceText: `OCP ${ocpVersion} from Trident release notes` },
-        update: { status: "supported", confidence: 0.92, sourceUrl }
-      });
+  private async syncTridentCompatibility(source: GithubSource, tag: string, version: string): Promise<void> {
+    const url = `https://raw.githubusercontent.com/${source.owner}/${source.repo}/${tag}/config/config.go`;
+    try {
+      const res = await fetch(url);
+      if (!res.ok) return;
+      const configGo = await res.text();
+      const parsed = parseTridentConfigGo(configGo);
+      if (!parsed) return;
+      for (const k8sVersion of parsed.kubernetes) {
+        await this.db.compatibilityEdge.upsert({
+          where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion } },
+          create: { sourceVersion: version, targetKind: "kubernetes", targetVersion: k8sVersion, status: "supported", confidence: 0.97, sourceUrl: url, evidenceText: `K8s ${k8sVersion} from config.go at ${tag}` },
+          update: { status: "supported", confidence: 0.97, sourceUrl: url }
+        });
+      }
+      for (const ocpVersion of parsed.openshift) {
+        await this.db.compatibilityEdge.upsert({
+          where: { sourceVersion_targetKind_targetVersion: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion } },
+          create: { sourceVersion: version, targetKind: "openshift", targetVersion: ocpVersion, status: "supported", confidence: 0.85, sourceUrl: url, evidenceText: `OCP ${ocpVersion} derived from K8s range in config.go at ${tag}` },
+          update: { status: "supported", confidence: 0.85, sourceUrl: url }
+        });
+      }
+    } catch {
+      // Non-fatal: config.go may not exist for older tags
     }
   }
 

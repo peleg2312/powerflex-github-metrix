@@ -53,8 +53,6 @@ export class AppService {
     }
     // CSM edges for operator version lookup (for display only, not compatibility)
     const csmEdges = allEdges.filter((e) => e.targetKind === "csm");
-    // Backend versions from current-docs as global fallback (docs-only data)
-    const globalBackend = allEdges.filter((e) => e.sourceVersion === "current-docs" && e.targetKind === "powerflex_backend");
 
     const projections = releases.map((release) => {
       // Direct lookup: per-CSI-version edges from verify-csi-vxflexos.sh (confidence 0.98)
@@ -65,11 +63,7 @@ export class AppService {
       const csmEdge = csiMinor ? csmEdges.find((e) => minor(e.targetVersion) === csiMinor) : null;
       const operatorVersion = csmEdge?.sourceVersion ?? null;
 
-      // Use direct per-CSI edges; fall back to global backend from docs if none available
-      const compatEdges = directEdges;
-      const backendVersions = this.edgeVersions(compatEdges, "powerflex_backend").length
-        ? this.edgeVersions(compatEdges, "powerflex_backend")
-        : this.edgeVersions(globalBackend, "powerflex_backend");
+      const backendVersions = this.edgeVersions(directEdges, "powerflex_backend");
 
       const bugs = release.fixedBugs.map<BugFix>((bug) => ({
         id: bug.externalId ?? bug.id,
@@ -87,8 +81,8 @@ export class AppService {
         operator_version: release.version,
         // csi_driver_version field repurposed: holds the associated CSM Operator version
         csi_driver_version: operatorVersion,
-        kubernetes_supported: this.edgeVersions(compatEdges, "kubernetes"),
-        openshift_supported: this.edgeVersions(compatEdges, "openshift"),
+        kubernetes_supported: this.edgeVersions(directEdges, "kubernetes"),
+        openshift_supported: this.edgeVersions(directEdges, "openshift"),
         powerflex_backend_version: backendVersions,
         bugs_fixed: bugs,
         known_issues: release.knownIssues.map((issue) => issue.description),
@@ -335,7 +329,7 @@ export class AppService {
 
   async products(): Promise<Array<{ slug: string; name: string }>> {
     return prisma.product.findMany({
-      where: { releases: { some: {} } },
+      where: { kind: "csi_driver", releases: { some: {} } },
       select: { slug: true, name: true },
       orderBy: { name: "asc" }
     });
